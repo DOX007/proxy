@@ -1,1 +1,119 @@
-Ai skall bygga min kompletta proxy weblesare i denna filen!
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Webproxy</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; background: #1e1e24; color: #eee; }
+  body { display: flex; flex-direction: column; }
+  form { display: flex; gap: 6px; padding: 8px; background: #2b2b33; }
+  button, select, input { font-size: 15px; border-radius: 6px; border: 1px solid #444; background: #3a3a44; color: #eee; padding: 8px 10px; }
+  button { cursor: pointer; }
+  button:disabled { opacity: .4; cursor: default; }
+  #url { flex: 1; min-width: 0; }
+  #status { padding: 4px 10px; font-size: 12px; color: #aaa; background: #25252c; min-height: 22px; }
+  iframe { flex: 1; width: 100%; border: 0; background: #fff; }
+</style>
+</head>
+<body>
+<form id="form">
+  <button type="button" id="back" disabled title="Bakåt">◀</button>
+  <button type="button" id="fwd" disabled title="Framåt">▶</button>
+  <button type="button" id="reload" title="Ladda om">⟳</button>
+  <input id="url" type="text" placeholder="Skriv webbadress eller sökord" autocomplete="off" autofocus>
+  <select id="proxy" title="Proxy">
+    <option value="https://api.allorigins.win/raw?url=">allorigins</option>
+    <option value="https://corsproxy.io/?url=">corsproxy.io</option>
+    <option value="https://api.codetabs.com/v1/proxy/?quest=">codetabs</option>
+  </select>
+  <button type="submit">Gå</button>
+</form>
+<div id="status">Redo</div>
+<iframe id="view" sandbox="allow-forms allow-scripts" title="Sida"></iframe>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const urlEl = $('url'), proxyEl = $('proxy'), view = $('view'), status = $('status');
+  const backBtn = $('back'), fwdBtn = $('fwd');
+  let history = [], pos = -1;
+
+  // Gör om inmatning till en giltig URL, annars sök via DuckDuckGo
+  function normalize(input) {
+    input = input.trim();
+    if (!input) return null;
+    if (/^https?:\/\//i.test(input)) return input;
+    if (/^[^\s]+\.[a-z]{2,}(\/.*)?$/i.test(input)) return 'https://' + input;
+    return 'https://html.duckduckgo.com/html/?q=' + encodeURIComponent(input);
+  }
+
+  function updateButtons() {
+    backBtn.disabled = pos <= 0;
+    fwdBtn.disabled = pos >= history.length - 1;
+  }
+
+  async function load(url) {
+    urlEl.value = url;
+    status.textContent = 'Laddar ' + url + ' ...';
+    try {
+      const res = await fetch(proxyEl.value + encodeURIComponent(url));
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const html = await res.text();
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      // <base> får relativa resurser att hämtas från originalsidan
+      const base = doc.createElement('base');
+      base.href = url;
+      doc.head.prepend(base);
+      // Länkar skickas upp till föräldern så att de går via proxyn
+      const script = doc.createElement('script');
+      script.textContent = `
+        document.addEventListener('click', e => {
+          const a = e.target.closest && e.target.closest('a[href]');
+          if (!a || a.href.startsWith('javascript:')) return;
+          e.preventDefault();
+          parent.postMessage({ proxyNav: a.href }, '*');
+        }, true);
+        document.addEventListener('submit', e => {
+          const f = e.target;
+          if ((f.method || 'get').toLowerCase() !== 'get') return;
+          e.preventDefault();
+          const u = new URL(f.action || location.href);
+          new FormData(f).forEach((v, k) => { if (typeof v === 'string') u.searchParams.set(k, v); });
+          parent.postMessage({ proxyNav: u.href }, '*');
+        }, true);`;
+      doc.body.append(script);
+      view.srcdoc = '<!DOCTYPE html>' + doc.documentElement.outerHTML;
+      status.textContent = url;
+    } catch (err) {
+      view.srcdoc = '<body style="font-family:sans-serif;padding:2em"><h2>Kunde inte ladda sidan</h2><p>'
+        + String(err.message).replace(/</g, '&lt;') + '</p><p>Prova en annan proxy i listan.</p></body>';
+      status.textContent = 'Fel: ' + err.message;
+    }
+  }
+
+  function go(url, push = true) {
+    if (!url) return;
+    if (push) {
+      history = history.slice(0, pos + 1);
+      history.push(url);
+      pos = history.length - 1;
+    }
+    updateButtons();
+    load(url);
+  }
+
+  $('form').addEventListener('submit', e => { e.preventDefault(); go(normalize(urlEl.value)); });
+  backBtn.onclick = () => { if (pos > 0) { pos--; go(history[pos], false); } };
+  fwdBtn.onclick = () => { if (pos < history.length - 1) { pos++; go(history[pos], false); } };
+  $('reload').onclick = () => { if (pos >= 0) load(history[pos]); };
+
+  window.addEventListener('message', e => {
+    if (e.source !== view.contentWindow || !e.data || typeof e.data.proxyNav !== 'string') return;
+    if (/^https?:\/\//i.test(e.data.proxyNav)) go(e.data.proxyNav);
+  });
+})();
+</script>
+</body>
+</html>
