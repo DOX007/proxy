@@ -9,6 +9,8 @@ logiken i `worker.js`. Allt deployas automatiskt från `main`.
 - Cloudflare Pages: `https://proxy-35p.pages.dev`
 - GitHub Pages: `https://dox007.github.io/proxy/` (använder samma proxy)
 - Proxyadressen är hårdkodad som `defaultProxyEndpoint` i `index.html`.
+- Deploy-URL:er med en hash i början av värdnamnet är versionsspecifika.
+  Använd den permanenta adressen `https://proxy-35p.pages.dev`.
 - Proxy-endpointen tillåter CORS-anrop från webbläsare på valfri origin, utan
   cookies eller inloggning. Åtkomst begränsas av GET-only-regler och validering
   som blockerar privata/lokala mål.
@@ -16,7 +18,8 @@ logiken i `worker.js`. Allt deployas automatiskt från `main`.
 ## Endpoints
 
 - `/proxy?url=...` – hämtar HTML-sidor (max 3 MB, max 5 omdirigeringar, 10 s).
-  Kräver en tillåten origin.
+  Skickar `Access-Control-Allow-Origin: *`; begäran använder inte cookies eller
+  inloggningsuppgifter.
 - `/asset?url=...` – hämtar bilder, typsnitt och CSS (max 8 MB). CSS skrivs om
   så att `url()` och `@import` också går via proxyn. SVG och skript blockeras.
 - `/health` – returnerar `ok`.
