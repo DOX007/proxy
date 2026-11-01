@@ -13,9 +13,6 @@
   button { cursor: pointer; }
   button:disabled { opacity: .4; cursor: default; }
   #url { flex: 1; min-width: 0; }
-  details { padding: 6px 10px; background: #25252c; color: #ccc; font-size: 13px; }
-  details form { padding: 6px 0; background: transparent; }
-  #worker { flex: 1; min-width: 0; }
   #status { padding: 4px 10px; font-size: 12px; color: #aaa; background: #25252c; min-height: 22px; }
   iframe { flex: 1; width: 100%; border: 0; background: #fff; }
 </style>
@@ -28,30 +25,17 @@
   <input id="url" type="text" placeholder="Skriv webbadress eller sökord" autocomplete="off" autofocus>
   <button type="submit">Gå</button>
 </form>
-<details id="workerConfig">
-  <summary>Proxyserver-inställning</summary>
-  <form id="workerForm">
-    <input id="worker" type="url" placeholder="https://proxy-35p.pages.dev" autocomplete="url" required>
-    <button type="submit">Spara</button>
-  </form>
-</details>
 <div id="status">Redo</div>
 <iframe id="view" sandbox="allow-forms allow-scripts" title="Sida"></iframe>
 
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const urlEl = $('url'), workerEl = $('worker'), view = $('view'), status = $('status');
-  const workerConfig = $('workerConfig');
+  const urlEl = $('url'), view = $('view'), status = $('status');
   const backBtn = $('back'), fwdBtn = $('fwd');
   const defaultProxyEndpoint = 'https://proxy-35p.pages.dev';
   let history = [], pos = -1;
   let activeRequest, requestId = 0;
-
-  const savedEndpoint = localStorage.getItem('proxyWorkerEndpoint');
-  workerEl.value = savedEndpoint && savedEndpoint !== location.origin
-    ? savedEndpoint
-    : defaultProxyEndpoint;
 
   // Gör om inmatning till en giltig URL, annars sök via DuckDuckGo
   function normalize(input) {
@@ -68,14 +52,7 @@
   }
 
   function workerUrl(path, target) {
-    if (!workerEl.value.trim()) {
-      throw new Error('Ange adressen till Proxyane-servern i inställningarna.');
-    }
-    const endpoint = new URL(workerEl.value.trim());
-    if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password ||
-        endpoint.search || endpoint.hash) {
-      throw new Error('Ange en giltig HTTPS-adress till Proxyane-servern.');
-    }
+    const endpoint = new URL(defaultProxyEndpoint);
     endpoint.pathname = path;
     if (target) endpoint.searchParams.set('url', target);
     return endpoint;
@@ -182,23 +159,6 @@
     updateButtons();
     load(url);
   }
-
-  $('workerForm').addEventListener('submit', e => {
-    e.preventDefault();
-    try {
-      const endpoint = new URL(workerEl.value.trim());
-      if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password ||
-          endpoint.search || endpoint.hash) {
-        throw new Error('Ange en HTTPS-adress utan sökväg eller parametrar.');
-      }
-      localStorage.setItem('proxyWorkerEndpoint', endpoint.origin);
-      workerEl.value = endpoint.origin;
-      workerConfig.open = false;
-      status.textContent = 'Worker-adressen sparad.';
-    } catch (err) {
-      status.textContent = 'Fel: ' + err.message;
-    }
-  });
 
   $('form').addEventListener('submit', e => { e.preventDefault(); go(normalize(urlEl.value)); });
   backBtn.onclick = () => { if (pos > 0) { pos--; go(history[pos], false); } };
