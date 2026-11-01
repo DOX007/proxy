@@ -24,9 +24,12 @@
   <button type="button" id="reload" title="Ladda om">⟳</button>
   <input id="url" type="text" placeholder="Skriv webbadress eller sökord" autocomplete="off" autofocus>
   <select id="proxy" title="Proxy">
+    <option value="auto">Auto (prövar alla)</option>
     <option value="https://api.allorigins.win/raw?url=">allorigins</option>
     <option value="https://corsproxy.io/?url=">corsproxy.io</option>
     <option value="https://api.codetabs.com/v1/proxy/?quest=">codetabs</option>
+    <option value="https://api.cors.lol/?url=">cors.lol</option>
+    <option value="https://thingproxy.freeboard.io/fetch/" data-raw="1">thingproxy</option>
   </select>
   <button type="submit">Gå</button>
 </form>
@@ -54,13 +57,30 @@
     fwdBtn.disabled = pos >= history.length - 1;
   }
 
+  // Prövar vald proxy, eller alla i tur och ordning vid "Auto"
+  async function fetchVia(url) {
+    const opts = [...proxyEl.options].filter(o => o.value !== 'auto');
+    const sel = proxyEl.selectedOptions[0];
+    const list = sel.value === 'auto' ? opts : [sel, ...opts.filter(o => o !== sel)];
+    let lastErr;
+    for (const o of list) {
+      try {
+        const res = await fetch(o.value + (o.dataset.raw ? url : encodeURIComponent(url)),
+          { signal: AbortSignal.timeout(8000) });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const text = await res.text();
+        if (!text.trim()) throw new Error('Tomt svar');
+        return text;
+      } catch (e) { lastErr = e; }
+    }
+    throw lastErr;
+  }
+
   async function load(url) {
     urlEl.value = url;
     status.textContent = 'Laddar ' + url + ' ...';
     try {
-      const res = await fetch(proxyEl.value + encodeURIComponent(url));
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const html = await res.text();
+      const html = await fetchVia(url);
       const doc = new DOMParser().parseFromString(html, 'text/html');
       // <base> får relativa resurser att hämtas från originalsidan
       const base = doc.createElement('base');
