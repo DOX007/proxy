@@ -51,7 +51,7 @@
     fwdBtn.disabled = pos >= history.length - 1;
   }
 
-  function workerUrl(path, target) {
+  function proxyUrl(path, target) {
     const endpoint = new URL(defaultProxyEndpoint);
     endpoint.pathname = path;
     if (target) endpoint.searchParams.set('url', target);
@@ -61,10 +61,10 @@
   async function fetchVia(url) {
     if (activeRequest) activeRequest.abort();
     activeRequest = new AbortController();
-    const response = await fetch(workerUrl('/proxy', url), { signal: activeRequest.signal });
-    if (!response.ok) throw new Error('Worker svarade HTTP ' + response.status + ': ' + await response.text());
+    const response = await fetch(proxyUrl('/proxy', url), { signal: activeRequest.signal });
+    if (!response.ok) throw new Error('Proxyn svarade HTTP ' + response.status + ': ' + await response.text());
     const html = await response.text();
-    if (!html.trim()) throw new Error('Worker returnerade en tom sida.');
+    if (!html.trim()) throw new Error('Proxyn returnerade en tom sida.');
     return { html };
   }
 
@@ -73,7 +73,7 @@
     try {
       const abs = new URL(value, pageUrl);
       if (!/^https?:$/.test(abs.protocol)) return value;
-      return workerUrl('/asset', abs.href).href;
+      return proxyUrl('/asset', abs.href).href;
     } catch {
       return value;
     }
