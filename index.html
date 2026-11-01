@@ -37,13 +37,13 @@
   let history = [], pos = -1;
   let activeRequest, requestId = 0;
 
-  // Gör om inmatning till en giltig URL, annars sök via DuckDuckGo
+  // Gör om inmatning till en giltig URL, annars sök via Google
   function normalize(input) {
     input = input.trim();
     if (!input) return null;
     if (/^https?:\/\//i.test(input)) return input;
     if (/^[^\s]+\.[a-z]{2,}(\/.*)?$/i.test(input)) return 'https://' + input;
-    return 'https://html.duckduckgo.com/html/?q=' + encodeURIComponent(input);
+    return 'https://www.google.com/search?hl=sv&q=' + encodeURIComponent(input);
   }
 
   function updateButtons() {
