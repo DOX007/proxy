@@ -1,31 +1,32 @@
 # Proxyane
 
-The Cloudflare Pages project serves the static frontend and the proxy endpoint.
-`functions/proxy.js` adapts `worker.js` to a Pages Function, so the existing
-Git-connected Pages project deploys both together from `main`. Public CORS
-relays are not used.
+Webbproxy som körs helt på Cloudflare Pages: `index.html` är gränssnittet och
+`functions/proxy.js` + `functions/asset.js` är Pages Functions som använder
+logiken i `worker.js`. Allt deployas automatiskt från `main`.
+
+## Adresser
+
+- Cloudflare Pages: `https://proxy-35p.pages.dev`
+- GitHub Pages: `https://dox007.github.io/proxy/` (använder samma proxy)
+- Proxyadressen är hårdkodad som `defaultProxyEndpoint` i `index.html`.
+- Tillåtna origins finns i `DEFAULT_ALLOWED_ORIGINS` i `worker.js` och
+  `ALLOWED_ORIGIN` i `wrangler.toml`. Byts en domän måste alla tre uppdateras.
+
+## Endpoints
+
+- `/proxy?url=...` – hämtar HTML-sidor (max 3 MB, max 5 omdirigeringar, 10 s).
+  Kräver en tillåten origin.
+- `/asset?url=...` – hämtar bilder, typsnitt och CSS (max 8 MB). CSS skrivs om
+  så att `url()` och `@import` också går via proxyn. SVG och skript blockeras.
+- `/health` – returnerar `ok`.
+
+Lokala/privata adresser och IPv6 nekas. Endast GET stöds.
 
 ## Deployment
 
-The Pages project should use the repository root (`.`) as its build output
-directory, with no build command. Git pushes to the production branch deploy
-the frontend and `functions/proxy.js`. The frontend uses its current Pages
-origin by default; no separate `workers.dev` service needs to be created.
+Pages-projektet använder repots rot (`.`) som output och inget byggkommando.
 
-The Worker allows `https://proxy-35p.pages.dev` and
-`https://dox007.github.io` by default, so CORS works even if a Pages
-environment variable is not configured. `ALLOWED_ORIGIN` in `wrangler.toml`
-can add further comma-separated origins.
-The frontend uses the hardcoded Cloudflare Pages endpoint (`defaultProxyEndpoint` in `index.html`)
-`https://proxy-35p.pages.dev/proxy`; this also works when opening the frontend
-from GitHub Pages. If either domain changes, update `defaultProxyEndpoint` and `DEFAULT_ALLOWED_ORIGINS` in `worker.js`, then deploy again.
+## Begränsningar
 
-The endpoint is read-only and accepts HTML pages only. It limits response
-size and redirects and rejects local/private IP targets. It does not proxy
-JavaScript APIs, downloads, POST forms, or other non-HTML responses. Page
-assets are requested directly from the original site, so sites that block
-third-party assets may render incompletely.
-
-## Bilder och stilmallar
-
-Bilder, typsnitt och CSS hämtas via `/asset?url=...` (max 8 MB, SVG och skript blockeras). CSS skrivs om så att `url()` och `@import` också går via proxyn.
+Skript, API-anrop och POST-formulär går inte via proxyn. Tunga JavaScript-sidor
+(t.ex. temu.com) eller sidor med botskydd kan därför bli tomma.
