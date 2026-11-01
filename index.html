@@ -23,14 +23,6 @@
   <button type="button" id="fwd" disabled title="Framåt">▶</button>
   <button type="button" id="reload" title="Ladda om">⟳</button>
   <input id="url" type="text" placeholder="Skriv webbadress eller sökord" autocomplete="off" autofocus>
-  <select id="proxy" title="Proxy">
-    <option value="auto">Auto (prövar alla)</option>
-    <option value="https://api.allorigins.win/raw?url=">allorigins</option>
-    <option value="https://corsproxy.io/?url=">corsproxy.io</option>
-    <option value="https://api.codetabs.com/v1/proxy/?quest=">codetabs</option>
-    <option value="https://api.cors.lol/?url=">cors.lol</option>
-    <option value="https://thingproxy.freeboard.io/fetch/" data-raw="1">thingproxy</option>
-  </select>
   <button type="submit">Gå</button>
 </form>
 <div id="status">Redo</div>
@@ -39,9 +31,17 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const urlEl = $('url'), proxyEl = $('proxy'), view = $('view'), status = $('status');
+  const urlEl = $('url'), view = $('view'), status = $('status');
   const backBtn = $('back'), fwdBtn = $('fwd');
+  const proxies = [
+    { name: 'allorigins', prefix: 'https://api.allorigins.win/raw?url=' },
+    { name: 'corsproxy.io', prefix: 'https://corsproxy.io/?url=' },
+    { name: 'codetabs', prefix: 'https://api.codetabs.com/v1/proxy/?quest=' },
+    { name: 'cors.lol', prefix: 'https://api.cors.lol/?url=' },
+    { name: 'thingproxy', prefix: 'https://thingproxy.freeboard.io/fetch/', raw: true }
+  ];
   let history = [], pos = -1;
+  let activeScan, requestId = 0;
 
   // Gör om inmatning till en giltig URL, annars sök via DuckDuckGo
   function normalize(input) {
@@ -57,30 +57,48 @@
     fwdBtn.disabled = pos >= history.length - 1;
   }
 
-  // Prövar vald proxy, eller alla i tur och ordning vid "Auto"
+  // Race all proxies for this URL and use the first successful complete response.
   async function fetchVia(url) {
-    const opts = [...proxyEl.options].filter(o => o.value !== 'auto');
-    const sel = proxyEl.selectedOptions[0];
-    const list = sel.value === 'auto' ? opts : [sel, ...opts.filter(o => o !== sel)];
-    let lastErr;
-    for (const o of list) {
-      try {
-        const res = await fetch(o.value + (o.dataset.raw ? url : encodeURIComponent(url)),
-          { signal: AbortSignal.timeout(8000) });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const text = await res.text();
-        if (!text.trim()) throw new Error('Tomt svar');
-        return text;
-      } catch (e) { lastErr = e; }
+    if (activeScan) activeScan.forEach(controller => controller.abort());
+    const controllers = proxies.map(() => new AbortController());
+    activeScan = controllers;
+    const failures = [];
+
+    try {
+      return await Promise.any(proxies.map(async (proxy, index) => {
+        const controller = controllers[index];
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        const startedAt = performance.now();
+        try {
+          const target = proxy.raw ? url : encodeURIComponent(url);
+          const res = await fetch(proxy.prefix + target, { signal: controller.signal });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const html = await res.text();
+          if (!html.trim()) throw new Error('Tomt svar');
+          return { html, proxy: proxy.name, elapsed: performance.now() - startedAt };
+        } catch (error) {
+          failures.push(proxy.name + ': ' + (error.message || 'anslutningen misslyckades'));
+          throw error;
+        } finally {
+          clearTimeout(timeout);
+        }
+      }));
+    } catch {
+      throw new Error('Alla proxyer misslyckades. ' + failures.join('; '));
+    } finally {
+      controllers.forEach(controller => controller.abort());
+      if (activeScan === controllers) activeScan = null;
     }
-    throw lastErr;
   }
 
   async function load(url) {
+    const currentRequest = ++requestId;
     urlEl.value = url;
-    status.textContent = 'Laddar ' + url + ' ...';
+    status.textContent = 'Jämför ' + proxies.length + ' proxyer för ' + url + ' ...';
     try {
-      const html = await fetchVia(url);
+      const result = await fetchVia(url);
+      if (currentRequest !== requestId) return;
+      const { html } = result;
       const doc = new DOMParser().parseFromString(html, 'text/html');
       // <base> får relativa resurser att hämtas från originalsidan
       const base = doc.createElement('base');
@@ -105,8 +123,9 @@
         }, true);`;
       doc.body.append(script);
       view.srcdoc = '<!DOCTYPE html>' + doc.documentElement.outerHTML;
-      status.textContent = url;
+      status.textContent = 'Snabbast: ' + result.proxy + ' (' + (result.elapsed / 1000).toFixed(2) + ' s) — ' + url;
     } catch (err) {
+      if (currentRequest !== requestId) return;
       view.srcdoc = '<body style="font-family:sans-serif;padding:2em"><h2>Kunde inte ladda sidan</h2><p>'
         + String(err.message).replace(/</g, '&lt;') + '</p><p>Prova en annan proxy i listan.</p></body>';
       status.textContent = 'Fel: ' + err.message;
