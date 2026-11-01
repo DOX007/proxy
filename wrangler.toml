@@ -1,6 +1,3 @@
 name = "proxy"
 compatibility_date = "2026-11-01"
 pages_build_output_dir = "."
-
-[vars]
-ALLOWED_ORIGIN = "https://proxy-35p.pages.dev,https://dox007.github.io"

@@ -9,8 +9,9 @@ logiken i `worker.js`. Allt deployas automatiskt från `main`.
 - Cloudflare Pages: `https://proxy-35p.pages.dev`
 - GitHub Pages: `https://dox007.github.io/proxy/` (använder samma proxy)
 - Proxyadressen är hårdkodad som `defaultProxyEndpoint` i `index.html`.
-- Tillåtna origins finns i `DEFAULT_ALLOWED_ORIGINS` i `worker.js` och
-  `ALLOWED_ORIGIN` i `wrangler.toml`. Byts en domän måste alla tre uppdateras.
+- Proxy-endpointen tillåter CORS-anrop från webbläsare på valfri origin, utan
+  cookies eller inloggning. Åtkomst begränsas av GET-only-regler och validering
+  som blockerar privata/lokala mål.
 
 ## Endpoints
 

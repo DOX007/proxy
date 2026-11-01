@@ -1,35 +1,20 @@
 const MAX_HTML_BYTES = 3 * 1024 * 1024;
 const MAX_ASSET_BYTES = 8 * 1024 * 1024;
 const MAX_REDIRECTS = 5;
-const DEFAULT_ALLOWED_ORIGINS = [
-  'https://proxy-35p.pages.dev',
-  'https://dox007.github.io'
-];
-
-function getAllowedOrigins(env) {
-  const configuredOrigins = (env.ALLOWED_ORIGIN || '')
-    .split(',')
-    .map(value => value.trim())
-    .filter(Boolean);
-  return new Set([...DEFAULT_ALLOWED_ORIGINS, ...configuredOrigins]);
-}
-
-function corsHeaders(origin, allowedOrigins) {
+function corsHeaders() {
   const headers = new Headers({
     'Vary': 'Origin',
     'X-Content-Type-Options': 'nosniff',
-    'Cache-Control': 'no-store'
+    'Cache-Control': 'no-store',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Max-Age': '86400'
   });
-  if (origin && allowedOrigins.has(origin)) {
-    headers.set('Access-Control-Allow-Origin', origin);
-    headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    headers.set('Access-Control-Max-Age', '86400');
-  }
   return headers;
 }
 
 function reply(request, env, body, status, contentType = 'text/plain; charset=utf-8') {
-  const headers = corsHeaders(request.headers.get('Origin'), getAllowedOrigins(env));
+  const headers = corsHeaders();
   headers.set('Content-Type', contentType);
   return new Response(body, { status, headers });
 }
@@ -189,21 +174,14 @@ async function handleAsset(request, url) {
 
 export default {
   async fetch(request, env) {
-    // Webbläsare skickar ingen Origin-header vid same-origin GET, så då används sidans egen origin
-    const sameOrigin = request.headers.get('Sec-Fetch-Site') === 'same-origin';
-    const origin = request.headers.get('Origin') || (sameOrigin ? new URL(request.url).origin : null);
-    const allowedOrigins = getAllowedOrigins(env);
+    const url = new URL(request.url);
     // Bilder, stilmallar och typsnitt laddas av iframen utan Origin-header
-    if (request.method === 'GET' && new URL(request.url).pathname === '/asset') {
-      return handleAsset(request, new URL(request.url));
-    }
-    if (!origin || !allowedOrigins.has(origin)) {
-      return reply(request, env, 'Origin tillåts inte.', 403);
+    if (request.method === 'GET' && url.pathname === '/asset') {
+      return handleAsset(request, url);
     }
 
-    const url = new URL(request.url);
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders(origin, allowedOrigins) });
+      return new Response(null, { status: 204, headers: corsHeaders() });
     }
     if (request.method !== 'GET') return reply(request, env, 'Endast GET tillåts.', 405);
     if (url.pathname === '/health') return reply(request, env, 'ok', 200);
