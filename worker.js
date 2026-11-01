@@ -127,7 +127,9 @@ async function fetchTarget(target) {
 
 export default {
   async fetch(request, env) {
-    const origin = request.headers.get('Origin');
+    // Webbläsare skickar ingen Origin-header vid same-origin GET, så då används sidans egen origin
+    const sameOrigin = request.headers.get('Sec-Fetch-Site') === 'same-origin';
+    const origin = request.headers.get('Origin') || (sameOrigin ? new URL(request.url).origin : null);
     const allowedOrigins = getAllowedOrigins(env);
     if (!origin || !allowedOrigins.has(origin)) {
       return reply(request, env, 'Origin tillåts inte.', 403);
