@@ -16,14 +16,16 @@ The Worker allows `https://proxy-35p.pages.dev` and
 `https://dox007.github.io` by default, so CORS works even if a Pages
 environment variable is not configured. `ALLOWED_ORIGIN` in `wrangler.toml`
 can add further comma-separated origins.
-The frontend defaults to the Cloudflare Pages endpoint
+The frontend uses the hardcoded Cloudflare Pages endpoint (`defaultProxyEndpoint` in `index.html`)
 `https://proxy-35p.pages.dev/proxy`; this also works when opening the frontend
-from GitHub Pages. If either domain changes, update the frontend endpoint and
-`DEFAULT_ALLOWED_ORIGINS` in `worker.js`, then deploy again. A custom proxy
-endpoint can be configured in the page's **Proxyserver-inställning** panel.
+from GitHub Pages. If either domain changes, update `defaultProxyEndpoint` and `DEFAULT_ALLOWED_ORIGINS` in `worker.js`, then deploy again.
 
 The endpoint is read-only and accepts HTML pages only. It limits response
 size and redirects and rejects local/private IP targets. It does not proxy
 JavaScript APIs, downloads, POST forms, or other non-HTML responses. Page
 assets are requested directly from the original site, so sites that block
 third-party assets may render incompletely.
+
+## Bilder och stilmallar
+
+Bilder, typsnitt och CSS hämtas via `/asset?url=...` (max 8 MB, SVG och skript blockeras). CSS skrivs om så att `url()` och `@import` också går via proxyn.
