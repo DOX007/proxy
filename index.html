@@ -13,6 +13,9 @@
   button { cursor: pointer; }
   button:disabled { opacity: .4; cursor: default; }
   #url { flex: 1; min-width: 0; }
+  details { padding: 6px 10px; background: #25252c; color: #ccc; font-size: 13px; }
+  details form { padding: 6px 0; background: transparent; }
+  #worker { flex: 1; min-width: 0; }
   #status { padding: 4px 10px; font-size: 12px; color: #aaa; background: #25252c; min-height: 22px; }
   iframe { flex: 1; width: 100%; border: 0; background: #fff; }
 </style>
@@ -25,23 +28,27 @@
   <input id="url" type="text" placeholder="Skriv webbadress eller sökord" autocomplete="off" autofocus>
   <button type="submit">Gå</button>
 </form>
+<details id="workerConfig">
+  <summary>Cloudflare Worker-inställning</summary>
+  <form id="workerForm">
+    <input id="worker" type="url" placeholder="https://ditt-konto.workers.dev" autocomplete="url" required>
+    <button type="submit">Spara server</button>
+  </form>
+</details>
 <div id="status">Redo</div>
 <iframe id="view" sandbox="allow-forms allow-scripts" title="Sida"></iframe>
 
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const urlEl = $('url'), view = $('view'), status = $('status');
+  const urlEl = $('url'), workerEl = $('worker'), view = $('view'), status = $('status');
+  const workerConfig = $('workerConfig');
   const backBtn = $('back'), fwdBtn = $('fwd');
-  const proxies = [
-    { name: 'allorigins', prefix: 'https://api.allorigins.win/raw?url=' },
-    { name: 'corsproxy.io', prefix: 'https://corsproxy.io/?url=' },
-    { name: 'codetabs', prefix: 'https://api.codetabs.com/v1/proxy/?quest=' },
-    { name: 'cors.lol', prefix: 'https://api.cors.lol/?url=' },
-    { name: 'thingproxy', prefix: 'https://thingproxy.freeboard.io/fetch/', raw: true }
-  ];
   let history = [], pos = -1;
-  let activeScan, requestId = 0;
+  let activeRequest, requestId = 0;
+
+  workerEl.value = localStorage.getItem('proxyWorkerEndpoint') || '';
+  if (!workerEl.value) workerConfig.open = true;
 
   // Gör om inmatning till en giltig URL, annars sök via DuckDuckGo
   function normalize(input) {
@@ -57,44 +64,34 @@
     fwdBtn.disabled = pos >= history.length - 1;
   }
 
-  // Race all proxies for this URL and use the first successful complete response.
-  async function fetchVia(url) {
-    if (activeScan) activeScan.forEach(controller => controller.abort());
-    const controllers = proxies.map(() => new AbortController());
-    activeScan = controllers;
-    const failures = [];
-
-    try {
-      return await Promise.any(proxies.map(async (proxy, index) => {
-        const controller = controllers[index];
-        const timeout = setTimeout(() => controller.abort(), 8000);
-        const startedAt = performance.now();
-        try {
-          const target = proxy.raw ? url : encodeURIComponent(url);
-          const res = await fetch(proxy.prefix + target, { signal: controller.signal });
-          if (!res.ok) throw new Error('HTTP ' + res.status);
-          const html = await res.text();
-          if (!html.trim()) throw new Error('Tomt svar');
-          return { html, proxy: proxy.name, elapsed: performance.now() - startedAt };
-        } catch (error) {
-          failures.push(proxy.name + ': ' + (error.message || 'anslutningen misslyckades'));
-          throw error;
-        } finally {
-          clearTimeout(timeout);
-        }
-      }));
-    } catch {
-      throw new Error('Alla proxyer misslyckades. ' + failures.join('; '));
-    } finally {
-      controllers.forEach(controller => controller.abort());
-      if (activeScan === controllers) activeScan = null;
+  function workerUrl(path, target) {
+    if (!workerEl.value.trim()) {
+      throw new Error('Ange adressen till din Cloudflare Worker i inställningarna.');
     }
+    const endpoint = new URL(workerEl.value.trim());
+    if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password ||
+        endpoint.search || endpoint.hash) {
+      throw new Error('Ange en giltig HTTPS-adress till din Cloudflare Worker.');
+    }
+    endpoint.pathname = path;
+    if (target) endpoint.searchParams.set('url', target);
+    return endpoint;
+  }
+
+  async function fetchVia(url) {
+    if (activeRequest) activeRequest.abort();
+    activeRequest = new AbortController();
+    const response = await fetch(workerUrl('/proxy', url), { signal: activeRequest.signal });
+    if (!response.ok) throw new Error('Worker svarade HTTP ' + response.status + ': ' + await response.text());
+    const html = await response.text();
+    if (!html.trim()) throw new Error('Worker returnerade en tom sida.');
+    return { html };
   }
 
   async function load(url) {
     const currentRequest = ++requestId;
     urlEl.value = url;
-    status.textContent = 'Jämför ' + proxies.length + ' proxyer för ' + url + ' ...';
+    status.textContent = 'Hämtar via din Worker: ' + url + ' ...';
     try {
       const result = await fetchVia(url);
       if (currentRequest !== requestId) return;
@@ -123,7 +120,7 @@
         }, true);`;
       doc.body.append(script);
       view.srcdoc = '<!DOCTYPE html>' + doc.documentElement.outerHTML;
-      status.textContent = 'Snabbast: ' + result.proxy + ' (' + (result.elapsed / 1000).toFixed(2) + ' s) — ' + url;
+      status.textContent = url;
     } catch (err) {
       if (currentRequest !== requestId) return;
       view.srcdoc = '<body style="font-family:sans-serif;padding:2em"><h2>Kunde inte ladda sidan</h2><p>'
@@ -142,6 +139,23 @@
     updateButtons();
     load(url);
   }
+
+  $('workerForm').addEventListener('submit', e => {
+    e.preventDefault();
+    try {
+      const endpoint = new URL(workerEl.value.trim());
+      if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password ||
+          endpoint.search || endpoint.hash) {
+        throw new Error('Ange en HTTPS-adress utan sökväg eller parametrar.');
+      }
+      localStorage.setItem('proxyWorkerEndpoint', endpoint.origin);
+      workerEl.value = endpoint.origin;
+      workerConfig.open = false;
+      status.textContent = 'Worker-adressen sparad.';
+    } catch (err) {
+      status.textContent = 'Fel: ' + err.message;
+    }
+  });
 
   $('form').addEventListener('submit', e => { e.preventDefault(); go(normalize(urlEl.value)); });
   backBtn.onclick = () => { if (pos > 0) { pos--; go(history[pos], false); } };
