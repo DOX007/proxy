@@ -1,14 +1,25 @@
 const MAX_HTML_BYTES = 3 * 1024 * 1024;
 const MAX_REDIRECTS = 5;
+const DEFAULT_ALLOWED_ORIGINS = [
+  'https://proxy-35p.pages.dev',
+  'https://dox007.github.io'
+];
 
-function corsHeaders(origin, allowedOrigin) {
+function getAllowedOrigins(env) {
+  const configuredOrigins = (env.ALLOWED_ORIGIN || '')
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean);
+  return new Set([...DEFAULT_ALLOWED_ORIGINS, ...configuredOrigins]);
+}
+
+function corsHeaders(origin, allowedOrigins) {
   const headers = new Headers({
     'Vary': 'Origin',
     'X-Content-Type-Options': 'nosniff',
     'Cache-Control': 'no-store'
   });
-  const allowedOrigins = (allowedOrigin || '').split(',').map(value => value.trim()).filter(Boolean);
-  if (origin && allowedOrigins.includes(origin)) {
+  if (origin && allowedOrigins.has(origin)) {
     headers.set('Access-Control-Allow-Origin', origin);
     headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
     headers.set('Access-Control-Max-Age', '86400');
@@ -17,7 +28,7 @@ function corsHeaders(origin, allowedOrigin) {
 }
 
 function reply(request, env, body, status, contentType = 'text/plain; charset=utf-8') {
-  const headers = corsHeaders(request.headers.get('Origin'), env.ALLOWED_ORIGIN);
+  const headers = corsHeaders(request.headers.get('Origin'), getAllowedOrigins(env));
   headers.set('Content-Type', contentType);
   return new Response(body, { status, headers });
 }
@@ -117,14 +128,14 @@ async function fetchTarget(target) {
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin');
-    const allowedOrigins = (env.ALLOWED_ORIGIN || '').split(',').map(value => value.trim()).filter(Boolean);
-    if (!origin || !allowedOrigins.includes(origin)) {
+    const allowedOrigins = getAllowedOrigins(env);
+    if (!origin || !allowedOrigins.has(origin)) {
       return reply(request, env, 'Origin tillåts inte.', 403);
     }
 
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders(origin, env.ALLOWED_ORIGIN) });
+      return new Response(null, { status: 204, headers: corsHeaders(origin, allowedOrigins) });
     }
     if (request.method !== 'GET') return reply(request, env, 'Endast GET tillåts.', 405);
     if (url.pathname === '/health') return reply(request, env, 'ok', 200);
