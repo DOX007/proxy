@@ -7,7 +7,8 @@ function corsHeaders(origin, allowedOrigin) {
     'X-Content-Type-Options': 'nosniff',
     'Cache-Control': 'no-store'
   });
-  if (origin && origin === allowedOrigin) {
+  const allowedOrigins = (allowedOrigin || '').split(',').map(value => value.trim()).filter(Boolean);
+  if (origin && allowedOrigins.includes(origin)) {
     headers.set('Access-Control-Allow-Origin', origin);
     headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
     headers.set('Access-Control-Max-Age', '86400');
@@ -116,7 +117,8 @@ async function fetchTarget(target) {
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin');
-    if (!origin || origin !== env.ALLOWED_ORIGIN) {
+    const allowedOrigins = (env.ALLOWED_ORIGIN || '').split(',').map(value => value.trim()).filter(Boolean);
+    if (!origin || !allowedOrigins.includes(origin)) {
       return reply(request, env, 'Origin tillåts inte.', 403);
     }
 

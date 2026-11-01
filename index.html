@@ -44,10 +44,14 @@
   const urlEl = $('url'), workerEl = $('worker'), view = $('view'), status = $('status');
   const workerConfig = $('workerConfig');
   const backBtn = $('back'), fwdBtn = $('fwd');
+  const defaultProxyEndpoint = 'https://proxy-35p.pages.dev';
   let history = [], pos = -1;
   let activeRequest, requestId = 0;
 
-  workerEl.value = localStorage.getItem('proxyWorkerEndpoint') || location.origin;
+  const savedEndpoint = localStorage.getItem('proxyWorkerEndpoint');
+  workerEl.value = savedEndpoint && savedEndpoint !== location.origin
+    ? savedEndpoint
+    : defaultProxyEndpoint;
 
   // Gör om inmatning till en giltig URL, annars sök via DuckDuckGo
   function normalize(input) {
