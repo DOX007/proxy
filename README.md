@@ -18,7 +18,7 @@ environment variable is not configured. `ALLOWED_ORIGIN` in `wrangler.toml`
 can add further comma-separated origins.
 The frontend uses the hardcoded Cloudflare Pages endpoint (`defaultProxyEndpoint` in `index.html`)
 `https://proxy-35p.pages.dev/proxy`; this also works when opening the frontend
-from GitHub Pages. If either domain changes, update `defaultProxyEndpoint` and
+from GitHub Pages. If either domain changes, update `defaultProxyEndpoint` and `DEFAULT_ALLOWED_ORIGINS` in `worker.js`, then deploy again.
 
 The endpoint is read-only and accepts HTML pages only. It limits response
 size and redirects and rejects local/private IP targets. It does not proxy
