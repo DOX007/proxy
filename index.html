@@ -141,7 +141,7 @@
     } catch (err) {
       if (currentRequest !== requestId) return;
       const errorMessage = err.message === 'Failed to fetch'
-        ? 'Anslutningen blockerades. Kontrollera att Cloudflare Pages har ALLOWED_ORIGIN=https://proxy-35p.pages.dev,https://dox007.github.io och att senaste bygget är klart.'
+        ? 'Kunde inte nå proxyservern. Kontrollera att https://proxy-35p.pages.dev är tillgänglig och att Cloudflare Pages har slutfört senaste bygget.'
         : err.message;
       view.srcdoc = '<body style="font-family:sans-serif;padding:2em"><h2>Kunde inte ladda sidan</h2><p>'
         + String(errorMessage).replace(/</g, '&lt;') + '</p></body>';
