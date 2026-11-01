@@ -1,4 +1,5 @@
 const MAX_HTML_BYTES = 3 * 1024 * 1024;
+const MAX_ASSET_BYTES = 8 * 1024 * 1024;
 const MAX_REDIRECTS = 5;
 const DEFAULT_ALLOWED_ORIGINS = [
   'https://proxy-35p.pages.dev',
@@ -125,12 +126,77 @@ async function fetchTarget(target) {
   throw new Error('Omdirigeringen kunde inte slutföras.');
 }
 
+function assetUrl(base, value, origin) {
+  try {
+    const abs = new URL(value, base);
+    if (!['http:', 'https:'].includes(abs.protocol)) return null;
+    return `${origin}/asset?url=${encodeURIComponent(abs.href)}`;
+  } catch {
+    return null;
+  }
+}
+
+function rewriteCss(css, base, origin) {
+  return css
+    .replace(/url\(\s*(["']?)([^"')]+)\1\s*\)/gi, (match, quote, value) => {
+      if (/^data:/i.test(value.trim())) return match;
+      const next = assetUrl(base, value.trim(), origin);
+      return next ? `url("${next}")` : match;
+    })
+    .replace(/@import\s+(["'])([^"']+)\1/gi, (match, quote, value) => {
+      const next = assetUrl(base, value.trim(), origin);
+      return next ? `@import "${next}"` : match;
+    });
+}
+
+async function handleAsset(request, url) {
+  const headers = new Headers({
+    'Access-Control-Allow-Origin': '*',
+    'X-Content-Type-Options': 'nosniff',
+    'Cache-Control': 'public, max-age=3600'
+  });
+  const tooLarge = () => new Response('Resursen är för stor.', { status: 413, headers });
+  try {
+    const target = validateTarget(url.searchParams.get('url') || '');
+    const upstream = await fetchTarget(target);
+    const type = (upstream.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
+    const isCss = type === 'text/css';
+    // SVG utesluts eftersom den kan innehålla skript
+    const isMedia = /^(image\/(?!svg)|font\/|application\/(x-)?font|application\/vnd\.ms-fontobject)/.test(type);
+    if (!isCss && !isMedia) {
+      await upstream.body?.cancel();
+      return new Response('Resurstypen tillåts inte.', { status: 415, headers });
+    }
+    const declared = Number(upstream.headers.get('Content-Length'));
+    if (Number.isFinite(declared) && declared > MAX_ASSET_BYTES) {
+      await upstream.body?.cancel();
+      return tooLarge();
+    }
+    if (isCss) {
+      const css = await upstream.text();
+      if (css.length > MAX_ASSET_BYTES) return tooLarge();
+      headers.set('Content-Type', 'text/css; charset=utf-8');
+      return new Response(rewriteCss(css, upstream.url || target.href, new URL(request.url).origin), { status: upstream.status, headers });
+    }
+    headers.set('Content-Type', type);
+    const buffer = await upstream.arrayBuffer();
+    if (buffer.byteLength > MAX_ASSET_BYTES) return tooLarge();
+    return new Response(buffer, { status: upstream.status, headers });
+  } catch (error) {
+    return new Response(error.message || 'Kunde inte hämta resursen.', { status: 502, headers });
+  }
+}
+
 export default {
   async fetch(request, env) {
     // Webbläsare skickar ingen Origin-header vid same-origin GET, så då används sidans egen origin
     const sameOrigin = request.headers.get('Sec-Fetch-Site') === 'same-origin';
     const origin = request.headers.get('Origin') || (sameOrigin ? new URL(request.url).origin : null);
     const allowedOrigins = getAllowedOrigins(env);
+    // Bilder, stilmallar och typsnitt laddas av iframen utan Origin-header
+    if (request.method === 'GET' && new URL(request.url).pathname === '/asset') {
+      return handleAsset(request, new URL(request.url));
+    }
     if (!origin || !allowedOrigins.has(origin)) {
       return reply(request, env, 'Origin tillåts inte.', 403);
     }

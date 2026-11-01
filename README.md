@@ -27,3 +27,7 @@ size and redirects and rejects local/private IP targets. It does not proxy
 JavaScript APIs, downloads, POST forms, or other non-HTML responses. Page
 assets are requested directly from the original site, so sites that block
 third-party assets may render incompletely.
+
+## Bilder och stilmallar
+
+Bilder, typsnitt och CSS hämtas via `/asset?url=...` (max 8 MB, SVG och skript blockeras). CSS skrivs om så att `url()` och `@import` också går via proxyn.

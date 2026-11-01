@@ -91,10 +91,46 @@
     return { html };
   }
 
+  // Bilder och stilmallar hämtas via proxyn så att hotlink-skydd och blockeringar inte slår ut dem
+  function viaAsset(value, pageUrl) {
+    try {
+      const abs = new URL(value, pageUrl);
+      if (!/^https?:$/.test(abs.protocol)) return value;
+      return workerUrl('/asset', abs.href).href;
+    } catch {
+      return value;
+    }
+  }
+
+  function rewriteAssets(doc, pageUrl) {
+    doc.querySelectorAll('img[src], source[src], video[poster], input[type=image][src]').forEach(el => {
+      const attr = el.hasAttribute('src') ? 'src' : 'poster';
+      el.setAttribute(attr, viaAsset(el.getAttribute(attr), pageUrl));
+    });
+    doc.querySelectorAll('img[srcset], source[srcset]').forEach(el => {
+      const rewritten = el.getAttribute('srcset').split(',').map(part => {
+        const [src, ...rest] = part.trim().split(/\s+/);
+        return src ? [viaAsset(src, pageUrl), ...rest].join(' ') : '';
+      }).filter(Boolean).join(', ');
+      el.setAttribute('srcset', rewritten);
+    });
+    doc.querySelectorAll('link[rel~=stylesheet][href]').forEach(el => {
+      el.setAttribute('href', viaAsset(el.getAttribute('href'), pageUrl));
+    });
+    doc.querySelectorAll('[style*="url("]').forEach(el => {
+      el.setAttribute('style', el.getAttribute('style').replace(/url\(\s*(["']?)([^"')]+)\1\s*\)/gi,
+        (m, q, v) => /^data:/i.test(v.trim()) ? m : `url("${viaAsset(v.trim(), pageUrl)}")`));
+    });
+    doc.querySelectorAll('style').forEach(el => {
+      el.textContent = el.textContent.replace(/url\(\s*(["']?)([^"')]+)\1\s*\)/gi,
+        (m, q, v) => /^data:/i.test(v.trim()) ? m : `url("${viaAsset(v.trim(), pageUrl)}")`);
+    });
+  }
+
   async function load(url) {
     const currentRequest = ++requestId;
     urlEl.value = url;
-    status.textContent = 'Hämtar via din Worker: ' + url + ' ...';
+    status.textContent = 'Hämtar via proxyn: ' + url + ' ...';
     try {
       const result = await fetchVia(url);
       if (currentRequest !== requestId) return;
@@ -104,6 +140,7 @@
       const base = doc.createElement('base');
       base.href = url;
       doc.head.prepend(base);
+      rewriteAssets(doc, url);
       // Länkar skickas upp till föräldern så att de går via proxyn
       const script = doc.createElement('script');
       script.textContent = `
