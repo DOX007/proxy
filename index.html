@@ -29,10 +29,10 @@
   <button type="submit">Gå</button>
 </form>
 <details id="workerConfig">
-  <summary>Cloudflare Worker-inställning</summary>
+  <summary>Proxyserver-inställning</summary>
   <form id="workerForm">
-    <input id="worker" type="url" placeholder="https://ditt-konto.workers.dev" autocomplete="url" required>
-    <button type="submit">Spara server</button>
+    <input id="worker" type="url" placeholder="https://proxy-35p.pages.dev" autocomplete="url" required>
+    <button type="submit">Spara</button>
   </form>
 </details>
 <div id="status">Redo</div>
@@ -47,8 +47,7 @@
   let history = [], pos = -1;
   let activeRequest, requestId = 0;
 
-  workerEl.value = localStorage.getItem('proxyWorkerEndpoint') || '';
-  if (!workerEl.value) workerConfig.open = true;
+  workerEl.value = localStorage.getItem('proxyWorkerEndpoint') || location.origin;
 
   // Gör om inmatning till en giltig URL, annars sök via DuckDuckGo
   function normalize(input) {
@@ -66,12 +65,12 @@
 
   function workerUrl(path, target) {
     if (!workerEl.value.trim()) {
-      throw new Error('Ange adressen till din Cloudflare Worker i inställningarna.');
+      throw new Error('Ange adressen till Proxyane-servern i inställningarna.');
     }
     const endpoint = new URL(workerEl.value.trim());
     if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password ||
         endpoint.search || endpoint.hash) {
-      throw new Error('Ange en giltig HTTPS-adress till din Cloudflare Worker.');
+      throw new Error('Ange en giltig HTTPS-adress till Proxyane-servern.');
     }
     endpoint.pathname = path;
     if (target) endpoint.searchParams.set('url', target);

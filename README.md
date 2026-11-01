@@ -1,34 +1,24 @@
 # Proxyane
 
-The GitHub Pages frontend uses a Cloudflare Worker to fetch HTML. Public CORS
-relays are not used. The Worker is intentionally read-only, accepts HTML only,
-limits response size and redirects, and rejects local/private IP targets.
+The Cloudflare Pages project serves the static frontend and the proxy endpoint.
+`functions/proxy.js` adapts `worker.js` to a Pages Function, so the existing
+Git-connected Pages project deploys both together from `main`. Public CORS
+relays are not used.
 
-## Deploy the Worker
+## Deployment
 
-1. Install Wrangler and sign in to your Cloudflare account:
+The Pages project should use the repository root (`.`) as its build output
+directory, with no build command. Git pushes to the production branch deploy
+the frontend and `functions/proxy.js`. The frontend uses its current Pages
+origin by default; no separate `workers.dev` service needs to be created.
 
-   ```sh
-   npm install --global wrangler
-   wrangler login
-   ```
+`wrangler.toml` sets `ALLOWED_ORIGIN` to `https://proxy-35p.pages.dev`. If the
+Pages domain changes, update that value to the exact site origin and deploy
+again. A custom proxy endpoint can be configured in the page's **Proxyserver-
+inställning** panel if needed.
 
-2. From the repository directory, deploy the Worker:
-
-   ```sh
-   wrangler deploy
-   ```
-
-3. Copy the `workers.dev` URL printed by Wrangler. In Proxyane, open
-   **Cloudflare Worker-inställning**, enter that HTTPS origin, and save it.
-   The frontend stores this setting in the current browser.
-
-The default allowed frontend origin is `https://dox007.github.io`, which is
-the origin used by this repository's GitHub Pages site. If you host the page
-elsewhere, update `ALLOWED_ORIGIN` in `wrangler.toml` to the exact origin,
-including the scheme and without a trailing path, then deploy again.
-
-The Worker supports GET requests for HTML pages only. It does not proxy
+The endpoint is read-only and accepts HTML pages only. It limits response
+size and redirects and rejects local/private IP targets. It does not proxy
 JavaScript APIs, downloads, POST forms, or other non-HTML responses. Page
 assets are requested directly from the original site, so sites that block
 third-party assets may render incompletely.
